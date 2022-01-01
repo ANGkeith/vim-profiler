@@ -122,6 +122,19 @@ class StartupData(object):
                 if not check_system:
                     raise
 
+            # https://regex101.com/r/Q41tJb/7
+            pattern = re.compile("^\d+.\d+\s+\d+.\d+\s+(?P<load_time>\d+.\d+): sourcing ((?P<config_directory>.*(?:(?:.config/nvim)|(?:.config/vim)))/(?P<plugin>(?:init\.vim)|(?:vimrc)|(?:init\.lua)))"
+                        , re.MULTILINE)
+            matches = pattern.finditer(log_txt)
+            for res in matches:
+                r = res.groupdict()
+                time = r['load_time']
+                plugin = "VIMRC"
+                if plugin in self.times:
+                    self.times[plugin] += float(time)
+                else:
+                    self.times[plugin] = float(time)
+
             if check_system:
                 for d in self.system_dirs:
                     matches = re.findall("^\d+.\d+\s+\d+.\d+\s+(\d+.\d+): "
