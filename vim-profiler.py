@@ -93,28 +93,6 @@ class StartupData(object):
         if not self.times:
             sys.exit()
 
-    def __guess_plugin_dir(self, log_txt):
-        """
-        Try to guess the vim directory containing plugins.
-        """
-        candidates = list()
-
-        # Get common plugin dir if any
-        vim_subdirs = "autoload|ftdetect|plugin|syntax"
-        matches = re.findall("^\d+.\d+\s+\d+.\d+\s+\d+.\d+: "
-                             "sourcing (.+?)/(?:[^/]+/)(?:%s)/[^/]+"
-                             % vim_subdirs, log_txt, re.MULTILINE)
-        for plugin_dir in matches:
-            # Ignore system plugins
-            if not is_subdir(self.system_dirs, plugin_dir):
-                candidates.append(plugin_dir)
-
-        if candidates:
-            # FIXME: the directory containing vimrc could be returned as well
-            return collections.Counter(candidates).most_common(1)[0][0]
-        else:
-            raise RuntimeError("no user plugin found")
-
     def __load_times(self, check_system=False):
         """
         Load startup times for log file.
@@ -123,27 +101,26 @@ class StartupData(object):
         print("Loading and processing logs...", end="")
         with open(self.log_filename, 'r') as log:
             log_txt = log.read()
-            plugin_dir = ""
 
-            # Try to guess the folder based on the logs themselves
+            # read from the user config directory
             try:
-                plugin_dir = self.__guess_plugin_dir(log_txt)
-                matches = re.findall("^\d+.\d+\s+\d+.\d+\s+(\d+.\d+): "
-                                     "sourcing %s/([^/]+)/" % plugin_dir,
-                                     log_txt, re.MULTILINE)
+                # https://regex101.com/r/Q41tJb/9
+                pattern = re.compile("^\d+.\d+\s+\d+.\d+\s+(?P<load_time>\d+.\d+): sourcing (?P<config_directory>.*(?:(?:/.config/nvim)|(?:/.config/vim)|(?:/.vim)))/(?:autoload|plugged|plugin)/(?P<plugin>[^/|\n|\.]+)"
+                        , re.MULTILINE)
+                matches = pattern.finditer(log_txt)
                 for res in matches:
-                    time = res[0]
-                    plugin = res[1]
+                    r = res.groupdict()
+                    time = r['load_time']
+                    plugin = r['plugin']
                     if plugin in self.times:
                         self.times[plugin] += float(time)
                     else:
                         self.times[plugin] = float(time)
+
             # Catch exception if no plugin was found
             except RuntimeError as e:
                 if not check_system:
                     raise
-                else:
-                    plugin_dir = ""
 
             if check_system:
                 for d in self.system_dirs:
@@ -159,10 +136,6 @@ class StartupData(object):
                             self.times[plugin] = float(time)
 
         print(" done.")
-        if plugin_dir:
-            print("Plugin directory: %s" % plugin_dir)
-        else:
-            print("No user plugin found.")
         if not self.times:
             print("No system plugin found.")
 
